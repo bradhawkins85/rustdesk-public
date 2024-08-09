@@ -85,7 +85,7 @@ impl PrivacyModeImpl {
         }
     }
 
-    // mainly from https://github.com/fufesou/rustdesk/blob/44c3a52ca8502cf53b58b59db130611778d34dbe/libs/scrap/src/dxgi/mod.rs#L365
+    // mainly from https://github.com/rustdesk-org/rustdesk/blob/44c3a52ca8502cf53b58b59db130611778d34dbe/libs/scrap/src/dxgi/mod.rs#L365
     fn set_displays(&mut self) {
         self.displays.clear();
         self.virtual_displays.clear();
@@ -213,6 +213,8 @@ impl PrivacyModeImpl {
                 dm.u1.s2_mut().dmPosition.x -= new_primary_dm.u1.s2().dmPosition.x;
                 dm.u1.s2_mut().dmPosition.y -= new_primary_dm.u1.s2().dmPosition.y;
                 dm.dmFields |= DM_POSITION;
+                dm.dmPelsWidth = 1920;
+                dm.dmPelsHeight = 1080;
                 let rc = ChangeDisplaySettingsExW(
                     dd.DeviceName.as_ptr(),
                     &mut dm,
@@ -220,7 +222,6 @@ impl PrivacyModeImpl {
                     flags,
                     NULL,
                 );
-
                 if rc != DISP_CHANGE_SUCCESSFUL {
                     log::error!(
                         "Failed ChangeDisplaySettingsEx, device name: {:?}, flags: {}, ret: {}",
@@ -230,6 +231,15 @@ impl PrivacyModeImpl {
                     );
                     bail!("Failed ChangeDisplaySettingsEx, ret: {}", rc);
                 }
+
+                // If we want to set dpi, the following references may be helpful.
+                // And setting dpi should be called after changing the display settings.
+                // https://stackoverflow.com/questions/35233182/how-can-i-change-windows-10-display-scaling-programmatically-using-c-sharp
+                // https://github.com/lihas/windows-DPI-scaling-sample/blob/master/DPIHelper/DpiHelper.cpp
+                //
+                // But the official API does not provide a way to get/set dpi.
+                // https://learn.microsoft.com/en-us/windows/win32/api/wingdi/ne-wingdi-displayconfig_device_info_type
+                // https://github.com/lihas/windows-DPI-scaling-sample/blob/738ac18b7a7ce2d8fdc157eb825de9cb5eee0448/DPIHelper/DpiHelper.h#L37
             }
         }
 

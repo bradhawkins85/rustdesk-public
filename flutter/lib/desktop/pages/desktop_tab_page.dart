@@ -8,6 +8,7 @@ import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
+// import 'package:flutter/services.dart';
 
 import '../../common/shared_state.dart';
 
@@ -41,21 +42,11 @@ class _DesktopTabPageState extends State<DesktopTabPage>
   final tabController = DesktopTabController(tabType: DesktopTabType.main);
 
   final RxBool _block = false.obs;
+  // bool mouseIn = false;
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.resumed) {
-      shouldBeBlocked(_block, canBeBlocked);
-    } else if (state == AppLifecycleState.inactive) {}
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    Get.put<DesktopTabController>(tabController);
+  _DesktopTabPageState() {
     RemoteCountState.init();
+    Get.put<DesktopTabController>(tabController);
     tabController.add(TabInfo(
         key: kTabLabelHomePage,
         label: kTabLabelHomePage,
@@ -79,7 +70,33 @@ class _DesktopTabPageState extends State<DesktopTabPage>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      shouldBeBlocked(_block, canBeBlocked);
+    } else if (state == AppLifecycleState.inactive) {}
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // HardwareKeyboard.instance.addHandler(_handleKeyEvent);
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  /*
+  bool _handleKeyEvent(KeyEvent event) {
+    if (!mouseIn && event is KeyDownEvent) {
+      print('key down: ${event.logicalKey}');
+      shouldBeBlocked(_block, canBeBlocked);
+    }
+    return false; // allow it to propagate
+  }
+  */
+
+  @override
   void dispose() {
+    // HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
     WidgetsBinding.instance.removeObserver(this);
     Get.delete<DesktopTabController>();
 
@@ -102,18 +119,14 @@ class _DesktopTabPageState extends State<DesktopTabPage>
                   isClose: false,
                 ),
               ),
+              blockTab: _block,
             )));
-    widget() => MouseRegion(
-        onEnter: (_) async {
-          await shouldBeBlocked(_block, canBeBlocked);
-        },
-        child: FocusScope(child: tabWidget, canRequestFocus: !_block.value));
     return isMacOS || kUseCompatibleUiMode
-        ? Obx(() => widget())
+        ? tabWidget
         : Obx(
             () => DragToResizeArea(
               resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
-              child: widget(),
+              child: tabWidget,
             ),
           );
   }

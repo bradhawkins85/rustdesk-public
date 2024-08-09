@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
+import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:settings_ui/settings_ui.dart';
@@ -83,18 +84,16 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _fingerprint = "";
   var _buildDate = "";
   var _autoDisconnectTimeout = "";
+  var _hideServer = false;
+  var _hideProxy = false;
+  var _hideNetwork = false;
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-
+  _SettingsState() {
     _enableAbr = option2bool(
         kOptionEnableAbr, bind.mainGetOptionSync(key: kOptionEnableAbr));
     _denyLANDiscovery = !option2bool(kOptionEnableLanDiscovery,
         bind.mainGetOptionSync(key: kOptionEnableLanDiscovery));
-    _onlyWhiteList = (bind.mainGetOptionSync(key: kOptionWhitelist)) !=
-        defaultOptionWhitelist;
+    _onlyWhiteList = whitelistNotEmpty();
     _enableDirectIPAccess = option2bool(
         kOptionDirectServer, bind.mainGetOptionSync(key: kOptionDirectServer));
     _enableRecordSession = option2bool(kOptionEnableRecordSession,
@@ -109,8 +108,19 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         bind.mainGetOptionSync(key: kOptionAllowAutoDisconnect));
     _autoDisconnectTimeout =
         bind.mainGetOptionSync(key: kOptionAutoDisconnectTimeout);
+    _hideServer =
+        bind.mainGetBuildinOption(key: kOptionHideServerSetting) == 'Y';
+    _hideProxy = bind.mainGetBuildinOption(key: kOptionHideProxySetting) == 'Y';
+    _hideNetwork =
+        bind.mainGetBuildinOption(key: kOptionHideNetworkSetting) == 'Y';
+  }
 
-    () async {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       var update = false;
 
       if (_hasIgnoreBattery) {
@@ -169,7 +179,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       if (update) {
         setState(() {});
       }
-    }();
+    });
   }
 
   @override
@@ -273,9 +283,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         initialValue: _onlyWhiteList,
         onToggle: (_) async {
           update() async {
-            final onlyWhiteList =
-                (await bind.mainGetOption(key: kOptionWhitelist)) !=
-                    defaultOptionWhitelist;
+            final onlyWhiteList = whitelistNotEmpty();
             if (onlyWhiteList != _onlyWhiteList) {
               setState(() {
                 _onlyWhiteList = onlyWhiteList;
@@ -530,6 +538,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     ));
 
     final disabledSettings = bind.isDisableSettings();
+    final hideSecuritySettings =
+        bind.mainGetBuildinOption(key: kOptionHideSecuritySetting) == 'Y';
     final settings = SettingsList(
       sections: [
         customClientSection,
@@ -553,12 +563,19 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             ],
           ),
         SettingsSection(title: Text(translate("Settings")), tiles: [
-          if (!disabledSettings)
+          if (!disabledSettings && !_hideNetwork && !_hideServer)
             SettingsTile(
                 title: Text(translate('ID/Relay Server')),
                 leading: Icon(Icons.cloud),
                 onPressed: (context) {
                   showServerSettings(gFFI.dialogManager);
+                }),
+          if (!isIOS && !_hideNetwork && !_hideProxy)
+            SettingsTile(
+                title: Text(translate('Socks5/Http(s) Proxy')),
+                leading: Icon(Icons.network_ping),
+                onPressed: (context) {
+                  changeSocks5Proxy();
                 }),
           SettingsTile(
               title: Text(translate('Language')),
@@ -625,13 +642,19 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               ),
             ],
           ),
-        if (isAndroid && !disabledSettings && !outgoingOnly)
+        if (isAndroid &&
+            !disabledSettings &&
+            !outgoingOnly &&
+            !hideSecuritySettings)
           SettingsSection(
             title: Text(translate("Share Screen")),
             tiles: shareScreenTiles,
           ),
         if (!bind.isIncomingOnly()) defaultDisplaySection(),
-        if (isAndroid && !disabledSettings && !outgoingOnly)
+        if (isAndroid &&
+            !disabledSettings &&
+            !outgoingOnly &&
+            !hideSecuritySettings)
           SettingsSection(
             title: Text(translate("Enhancements")),
             tiles: enhancementsTiles,
@@ -786,7 +809,7 @@ void showThemeSettings(OverlayDialogManager dialogManager) async {
 void showAbout(OverlayDialogManager dialogManager) {
   dialogManager.show((setState, close, context) {
     return CustomAlertDialog(
-      title: Text('${translate('About')} RustDesk'),
+      title: Text(translate('About RustDesk')),
       content: Wrap(direction: Axis.vertical, spacing: 12, children: [
         Text('Version: $version'),
         InkWell(

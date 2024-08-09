@@ -1,16 +1,5 @@
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
-use std::iter::FromIterator;
-#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
-use std::sync::Arc;
-use std::{
-    collections::HashMap,
-    ops::{Deref, DerefMut},
-    sync::{
-        atomic::{AtomicI64, Ordering},
-        RwLock,
-    },
-};
-
+#[cfg(target_os = "windows")]
+use crate::ipc::ClipboardNonFile;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::ipc::Connection;
 #[cfg(not(any(target_os = "ios")))]
@@ -21,7 +10,7 @@ use clipboard::ContextSend;
 use hbb_common::tokio::sync::mpsc::unbounded_channel;
 use hbb_common::{
     allow_err,
-    config::Config,
+    config::{keys::*, option2bool, Config},
     fs::is_write_need_confirmation,
     fs::{self, get_string, new_send_confirm, DigestCheckResult},
     log,
@@ -36,6 +25,18 @@ use hbb_common::{
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use hbb_common::{tokio::sync::Mutex as TokioMutex, ResultType};
 use serde_derive::Serialize;
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+use std::iter::FromIterator;
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    ops::{Deref, DerefMut},
+    sync::{
+        atomic::{AtomicI64, Ordering},
+        RwLock,
+    },
+};
 
 #[derive(Serialize, Clone)]
 pub struct Client {
@@ -486,6 +487,41 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 Data::CloseVoiceCall(reason) => {
                                     self.cm.voice_call_closed(self.conn_id, reason.as_str());
                                 }
+                                #[cfg(target_os = "windows")]
+                                Data::ClipboardNonFile(_) => {
+                                    match crate::clipboard::check_clipboard_cm() {
+                                        Ok(multi_clipoards) => {
+                                            let mut raw_contents = bytes::BytesMut::new();
+                                            let mut main_data = vec![];
+                                            for c in multi_clipoards.clipboards.into_iter() {
+                                                let content_len = c.content.len();
+                                                let (content, next_raw) = {
+                                                    // TODO: find out a better threshold
+                                                    if content_len > 1024 * 3 {
+                                                        (c.content, false)
+                                                    } else {
+                                                        raw_contents.extend(c.content);
+                                                        (bytes::Bytes::new(), true)
+                                                    }
+                                                };
+                                                main_data.push(ClipboardNonFile {
+                                                    compress: c.compress,
+                                                    content,
+                                                    content_len,
+                                                    next_raw,
+                                                    width: c.width,
+                                                    height: c.height,
+                                                    format: c.format.value(),
+                                                });
+                                            }
+                                            allow_err!(self.stream.send(&Data::ClipboardNonFile(Some(("".to_owned(), main_data)))).await);
+                                            allow_err!(self.stream.send_raw(raw_contents.into()).await);
+                                        }
+                                        Err(e) => {
+                                            allow_err!(self.stream.send(&Data::ClipboardNonFile(Some((format!("{}", e), vec![])))).await);
+                                        }
+                                    }
+                                }
                                 _ => {
 
                                 }
@@ -583,9 +619,10 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
             feature = "unix-file-copy-paste"
         ),
     ))]
-    ContextSend::enable(
-        Config::get_option(hbb_common::config::keys::OPTION_ENABLE_FILE_TRANSFER).is_empty(),
-    );
+    ContextSend::enable(option2bool(
+        OPTION_ENABLE_FILE_TRANSFER,
+        &Config::get_option(OPTION_ENABLE_FILE_TRANSFER),
+    ));
 
     match ipc::new_listener("_cm").await {
         Ok(mut incoming) => {

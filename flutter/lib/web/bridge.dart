@@ -1614,5 +1614,21 @@ class RustdeskImpl {
     throw UnimplementedError();
   }
 
+  bool mainHasValidBotSync({dynamic hint}) {
+    throw UnimplementedError();
+  }
+
+  Future<String> mainVerifyBot({required String token, dynamic hint}) {
+    throw UnimplementedError();
+  }
+
+  String mainGetUnlockPin({dynamic hint}) {
+    throw UnimplementedError();
+  }
+
+  String mainSetUnlockPin({required String pin, dynamic hint}) {
+    throw UnimplementedError();
+  }
+
   void dispose() {}
 }
